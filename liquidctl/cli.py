@@ -74,7 +74,7 @@ import sys
 
 from docopt import docopt
 
-from liquidctl.driver import *
+from liquidctl.driver_tree import find_devices
 from liquidctl.util import color_from_str
 from liquidctl.version import __version__
 
@@ -108,7 +108,7 @@ _PARSE_ARG = {
     '--debug': bool,
 }
 
-# options that cause liquidctl.driver.find_liquidctl_devices to ommit devices
+# options that cause find_devices to ommit devices
 _FILTER_OPTIONS = [
     'vendor',
     'product',
@@ -270,16 +270,16 @@ def main():
     device_id = None
 
     if not args['--device']:
-        selected = list(find_liquidctl_devices(**opts))
+        selected = list(find_devices(**opts))
     else:
         device_id = int(args['--device'])
         no_filters = {opt: val for opt, val in opts.items() if opt not in _FILTER_OPTIONS}
-        compat = list(find_liquidctl_devices(**no_filters))
+        compat = list(find_devices(**no_filters))
         if device_id < 0 or device_id >= len(compat):
             raise IndexError('Device ID out of bounds')
         if filter_count:
             # check that --device matches other filter criteria
-            matched_devs = [dev.device for dev in find_liquidctl_devices(**opts)]
+            matched_devs = [dev.device for dev in find_devices(**opts)]
             if compat[device_id].device not in matched_devs:
                 raise IndexError('Device ID does not match remaining selection criteria')
             LOGGER.warning('mixing --device <id> with other filters is not recommended; '
@@ -318,8 +318,8 @@ def main():
 
 def find_all_supported_devices(**opts):
     """Deprecated."""
-    LOGGER.warning('deprecated: use liquidctl.driver.find_liquidctl_devices instead')
-    return find_liquidctl_devices(**opts)
+    LOGGER.warning('deprecated: use liquidctl.find_devices instead')
+    return find_devices(**opts)
 
 
 if __name__ == '__main__':

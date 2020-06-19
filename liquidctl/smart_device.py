@@ -102,10 +102,12 @@ Copyright (C) 2018–2020  each contribution's author
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
+__all__ = ['SmartDevice', 'SmartDeviceV2']
+
 import itertools
 import logging
 
-from liquidctl.driver.usb import UsbHidDriver
+from liquidctl.driver_tree import UsbHidDriver
 from liquidctl.util import clamp, Hue2Accessory, HUE2_MAX_ACCESSORIES_IN_CHANNEL
 
 LOGGER = logging.getLogger(__name__)
@@ -121,7 +123,7 @@ _ANIMATION_SPEEDS = {
 _MIN_DUTY = 0
 _MAX_DUTY = 100
 
-class CommonSmartDeviceDriver(UsbHidDriver):
+class _CommonSmartDeviceDriver(UsbHidDriver):
     """Common functions of Smart Device and Grid drivers."""
 
     def __init__(self, device, description, speed_channels, color_channels, **kwargs):
@@ -180,7 +182,7 @@ class CommonSmartDeviceDriver(UsbHidDriver):
         raise NotImplementedError()
 
 
-class SmartDeviceDriver(CommonSmartDeviceDriver):
+class SmartDevice(_CommonSmartDeviceDriver):
     """liquidctl driver for the NZXT Smart Device (V1) and Grid+ V3."""
 
     SUPPORTED_DEVICES = [
@@ -298,7 +300,7 @@ class SmartDeviceDriver(CommonSmartDeviceDriver):
         self._write([0x2, 0x4d, cid, 0, duty])
 
 
-class SmartDeviceV2Driver(CommonSmartDeviceDriver):
+class SmartDeviceV2(_CommonSmartDeviceDriver):
     """liquidctl driver for the NZXT Smart Device V2, NZXT HUE 2 and NZXT HUE 2 Ambient."""
 
     SUPPORTED_DEVICES = [
@@ -491,5 +493,7 @@ class SmartDeviceV2Driver(CommonSmartDeviceDriver):
         self._write(msg)
 
 
-# backwards compatibility
-NzxtSmartDeviceDriver = SmartDeviceDriver
+# deprecated aliases
+NzxtSmartDeviceDriver = SmartDevice
+SmartDeviceDriver = SmartDevice
+SmartDeviceV2Driver = SmartDeviceV2

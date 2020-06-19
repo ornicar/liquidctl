@@ -16,7 +16,7 @@ set fan or pump speeds.
 Naming
 ------
 
-The module and driver were named "kraken_two" and "KrakenTwoDriver" in
+The module and driver were named "kraken_two" and "KrakenX2" in
 reference to the common sufix in the model names (instead of the generation
 number).  This turned out to be a bad idea, but the names are kept for
 backwards compatibility.
@@ -29,10 +29,12 @@ Incorporates work by leaty, KsenijaS, Alexander Tong and Jens Neumaier.
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
+__all__ = ['Kraken2']
+
 import itertools
 import logging
 
-from liquidctl.driver.usb import UsbHidDriver
+from liquidctl.driver_tree import UsbHidDriver
 from liquidctl.util import clamp, normalize_profile, interpolate_profile
 
 LOGGER = logging.getLogger(__name__)
@@ -91,7 +93,7 @@ _WRITE_ENDPOINT = 0x1
 _WRITE_LENGTH = 65
 
 
-class KrakenTwoDriver(UsbHidDriver):
+class Kraken2(UsbHidDriver):
     """liquidctl driver for third generation NZXT Kraken X and M liquid coolers."""
 
     DEVICE_KRAKENX = 'Kraken X'
@@ -260,3 +262,5 @@ class KrakenTwoDriver(UsbHidDriver):
         self.device.write(data + padding)
 
 
+# deprecated alias
+KrakenTwoDriver = Kraken2

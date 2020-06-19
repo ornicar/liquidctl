@@ -2,7 +2,7 @@ from _testutils import *
 
 import unittest
 
-from liquidctl.driver.coolit_platinum import CoolitPlatinumDriver
+from liquidctl.hydro_platinum import HydroPlatinum
 from liquidctl.pmbus import compute_pec
 
 
@@ -36,7 +36,7 @@ class CorsairPlatinumTestCase(unittest.TestCase):
         description = 'Mock H115i Platinum'
         kwargs = {'fan_count': 2, 'rgb_fans': True}
         self.mock_hid = _MockH115iPlatinum()
-        self.device = CoolitPlatinumDriver(self.mock_hid, description, **kwargs)
+        self.device = HydroPlatinum(self.mock_hid, description, **kwargs)
         self.device.connect()
 
     def tearDown(self):

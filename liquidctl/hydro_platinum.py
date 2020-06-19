@@ -23,16 +23,17 @@ Copyright (C) 2020–2020  each contribution's author
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
+__all__ = ['HydroPlatinum']
+
 import itertools
 import logging
 
 from enum import Enum, unique
 
-from liquidctl.driver.usb import UsbHidDriver
-from liquidctl.keyval import RuntimeStorage
+from liquidctl.driver_tree import UsbHidDriver
 from liquidctl.pmbus import compute_pec
+from liquidctl.util import RuntimeStorage
 from liquidctl.util import clamp, fraction_of_byte, u16le_from, normalize_profile
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ def _quoted(*names):
     return ', '.join(map(repr, names))
 
 
-class CoolitPlatinumDriver(UsbHidDriver):
+class HydroPlatinum(UsbHidDriver):
     """liquidctl driver for Corsair Platinum and PRO XT coolers."""
 
     SUPPORTED_DEVICES = [
