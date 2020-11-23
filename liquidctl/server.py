@@ -10,7 +10,7 @@ class CoolerStatus:
     rpm: int
 
 @dataclass
-class KrakenStatus:
+class AioStatus:
     water_temp: float
     pump: CoolerStatus
 
@@ -22,7 +22,7 @@ class CaseStatus:
 
 @dataclass
 class CoolingStatus:
-    kraken: KrakenStatus
+    aio: AioStatus
     case: CaseStatus
 
 @dataclass
@@ -43,13 +43,13 @@ PROFILE = [
 
 class Server:
 
-    mode = 0
+    mode = -1
 
-    def __init__(self, kraken, case):
-        self.kraken = kraken
+    def __init__(self, aio, case):
+        self.aio = aio
         self.case = case
-        self.cooling = Cooling(kraken, case)
-        self.rgb = Rgb(kraken, case)
+        self.cooling = Cooling(aio, case)
+        self.rgb = Rgb(aio, case)
 
         self.loop()
 
@@ -61,7 +61,7 @@ class Server:
             status = CromStatus(self.cooling.status(), self.read_cpu_temp())
             self.write_status(status)
 
-            mode = self.mode_from_water_temp(status.cooling.kraken.water_temp)
+            mode = self.mode_from_water_temp(status.cooling.aio.water_temp)
 
             if mode != self.mode:
                 self.journal(f'Mode: {self.mode} -> {mode}')
@@ -82,9 +82,9 @@ class Server:
         return mode
 
     def write_status(self, status: CoolingStatus):
-        k = status.cooling.kraken
+        k = status.cooling.aio
         ks = str(f'{k.water_temp} {k.pump.duty} {k.pump.rpm}')
-        open("/tmp/kraken-monitor", "w").write(ks)
+        open("/tmp/aio-monitor", "w").write(ks)
 
         c = status.cooling.case
         cs = str(f'{c.cpu_fan.duty} {c.rear_fan.duty} {c.top_fan.duty}')
@@ -99,18 +99,18 @@ class Server:
 
 class Cooling:
 
-    def __init__(self, kraken, case):
-        self.kraken = kraken
+    def __init__(self, aio, case):
+        self.aio = aio
         self.case = case
 
     def status(self):
-        ks = self.kraken.get_status()
+        ks = self.aio.get_status()
         water_temp = float(ks[0][1])
         cs = self.case.get_status()
         def fan_value(fan_id: int, name: str):
             return int(next((f[1] for f in cs if f[0] == f'Fan {fan_id} {name}'), 0))
         return CoolingStatus(
-            KrakenStatus(
+            AioStatus(
                 water_temp if water_temp and water_temp > 15 else 99, # conservative failsafe
                 CoolerStatus(int(ks[1][1]), int(ks[2][1]))
             ),
@@ -122,16 +122,16 @@ class Cooling:
         )
 
     def set_mode(self, mode: int):
-        _, pump, cpu, rear, top = PROFILE[mode]
-        self.kraken.set_fixed_speed("pump", pump)
+        _, pump, cpu, rear, top, *_ = PROFILE[mode]
+        self.aio.set_fixed_speed("pump", pump)
         self.case.set_fixed_speed("fan1", cpu)
         self.case.set_fixed_speed("fan2", rear)
         self.case.set_fixed_speed("fan3", top)
 
 class Rgb:
 
-    def __init__(self, kraken, case) -> None:
-        self.kraken = kraken
+    def __init__(self, aio, case) -> None:
+        self.aio = aio
         self.case = case
 
     def set_mode(self, mode: int):
@@ -164,10 +164,10 @@ class Rgb:
             self.logo("fading", "660000 000000", "fastest")
 
     def ring(self, mode, colors, speed = "normal"):
-        self.kraken.set_color("ring", mode, self.color_map(colors), speed=speed)
+        self.aio.set_color("ring", mode, self.color_map(colors), speed=speed)
 
     def logo(self, mode, colors, speed = "normal"):
-        self.kraken.set_color("logo", mode, self.color_map(colors), speed=speed)
+        self.aio.set_color("logo", mode, self.color_map(colors), speed=speed)
 
     def color_map(self, colors: str):
         return map(color_from_str, colors.split(' ') if colors else [])
