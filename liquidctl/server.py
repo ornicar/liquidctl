@@ -41,9 +41,12 @@ PROFILE = [
     [30,        100,    100,    100,    100,    "fusion"]
 ]
 
+BOOST_CPU_TEMP = 70
+
 class Server:
 
     mode = -1
+    boost_cooldown = 0
 
     def __init__(self, aio, case):
         self.aio = aio
@@ -65,6 +68,15 @@ class Server:
 
             manual = self.read_manual_mode()
             mode = manual if manual and mode - manual < 4 else mode
+
+            if self.boost_cooldown:
+                if status.cpu_temp < BOOST_CPU_TEMP:
+                    self.boost_cooldown -= 1
+                mode = max(3, mode)
+            elif status.cpu_temp >= BOOST_CPU_TEMP and mode < 3:
+                self.journal("Boost cooling due to high CPU temp")
+                self.boost_cooldown = 10
+                mode = 3
 
             if mode != self.mode:
                 self.journal(f'Mode: {self.mode} -> {mode} ({PROFILE[mode]})')
