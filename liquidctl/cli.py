@@ -41,7 +41,6 @@ Other interface options:
   -g, --debug                 Show debug information on stderr
   --version                   Display the version number
   --help                      Show this message
-  --sleep <number>            Time between two readouts in server mode
 
 Deprecated:
   --hid <ignored>             Deprecated
@@ -78,7 +77,7 @@ from liquidctl.driver import *
 from liquidctl.error import NotSupportedByDevice, NotSupportedByDriver
 from liquidctl.util import color_from_str
 from liquidctl.version import __version__
-from server import start_server
+from server import Server
 
 
 # conversion from CLI arg to internal option; as options as forwarded to bused
@@ -108,8 +107,6 @@ _PARSE_ARG = {
     '--unsafe': lambda x: x.lower().split(','),
     '--verbose': bool,
     '--debug': bool,
-
-    '--sleep': int
 }
 
 # options that cause liquidctl.driver.find_liquidctl_devices to ommit devices
@@ -267,6 +264,26 @@ def main():
         logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
         sys.tracebacklimit = 0
 
+    if args['server']:
+        devices = list(find_liquidctl_devices())
+        for dev in devices:
+            tpe = type(dev).__name__
+            if tpe == "KrakenX3":
+                kraken = dev
+                kraken.connect()
+                _print_dev_status(kraken, kraken.initialize())
+            elif tpe == "SmartDevice2":
+                smart = dev
+                smart.connect()
+                _print_dev_status(smart, smart.initialize())
+            else:
+                raise f'Unknown device {tpe}'
+        if kraken and smart:
+            Server(kraken, smart)
+        else:
+            raise "Couldn't find kraken or smart!"
+        return
+
     opts = _make_opts(args)
     filter_count = sum(1 for opt in opts if opt in _FILTER_OPTIONS)
     device_id = None
@@ -305,8 +322,6 @@ def main():
                 _print_dev_status(dev, dev.initialize(**opts))
             elif args['status']:
                 _print_dev_status(dev, dev.get_status(**opts))
-            elif args['server']:
-                start_server(dev, opts)
             elif args['set'] and args['speed']:
                 _device_set_speed(dev, args, **opts)
             elif args['set'] and args['color']:
