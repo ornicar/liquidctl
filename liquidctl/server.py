@@ -1,3 +1,4 @@
+import signal
 import time
 from dataclasses import dataclass
 
@@ -37,7 +38,7 @@ PROFILE = [
 BOOST_CPU_TEMP = 69
 BOOST_CPU_MODE = 3
 BOOST_CPU_TIME = 15
-ERROR_MODE = 3
+SAFE_MODE = 3
 FAN_CPU = "fan1"
 FAN_REAR = "fan2"
 FAN_TOP = "fan3"
@@ -72,20 +73,26 @@ class Server:
 
     mode = -1
     boost_cooldown = 0
+    keep_running = True
 
     def __init__(self, aio, case):
         self.cooling = Cooling(aio, case)
         self.rgb = Rgb(aio, case)
 
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
         try:
             self.loop()
         except Exception as e:
-            self.rgb.set_theme("error")
-            self.cooling.set_mode(ERROR_MODE)
+            self.journal(e)
+            self.safe_mode()
             raise e
 
     def loop(self):
         while True:
+            if not self.keep_running:
+                self.safe_mode()
+                break
             status = CromStatus(self.cooling.status(), self.read_cpu_temp())
             self.write_status(status)
 
@@ -146,6 +153,14 @@ class Server:
             return mode
         except:
             return None
+
+    def exit_gracefully(self, signum, frame):
+        self.journal("Stop")
+        self.keep_running = False
+
+    def safe_mode(self):
+        self.rgb.set_theme("error")
+        self.cooling.set_mode(SAFE_MODE)
 
     def journal(self, msg):
         print(f'CROM Server - {msg}')
