@@ -27,7 +27,7 @@ PROFILE = [
     [30,        100,    100,    100,    100,    "fusion"]
 ]
 
-BOOST_CPU_TEMP = 70
+BOOST_CPU_TEMP = 69
 BOOST_CPU_MODE = 3
 BOOST_CPU_TIME = 15
 ERROR_MODE = 3
@@ -67,8 +67,6 @@ class Server:
     boost_cooldown = 0
 
     def __init__(self, aio, case):
-        self.aio = aio
-        self.case = case
         self.cooling = Cooling(aio, case)
         self.rgb = Rgb(aio, case)
 
