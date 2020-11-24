@@ -42,6 +42,10 @@ PROFILE = [
 ]
 
 BOOST_CPU_TEMP = 70
+BOOST_CPU_MODE = 3
+BOOST_CPU_TIME = 15
+
+ERROR_MODE = 3
 
 class Server:
 
@@ -54,10 +58,12 @@ class Server:
         self.cooling = Cooling(aio, case)
         self.rgb = Rgb(aio, case)
 
-        self.loop()
-
-    def journal(self, msg):
-        print(f'CROM Server - {msg}')
+        try:
+            self.loop()
+        except Exception as e:
+            self.rgb.set_theme("error")
+            self.cooling.set_mode(ERROR_MODE)
+            raise e
 
     def loop(self):
         while True:
@@ -67,7 +73,7 @@ class Server:
             mode = self.mode_from_water_temp(status.cooling.aio.water_temp)
 
             manual = self.read_manual_mode()
-            mode = manual if manual and mode - manual < 4 else mode
+            mode = manual if manual is not None and mode - manual < 2 else mode
 
             if self.boost_cooldown:
                 if status.cpu_temp < BOOST_CPU_TEMP:
@@ -75,8 +81,8 @@ class Server:
                 mode = max(3, mode)
             elif status.cpu_temp >= BOOST_CPU_TEMP and mode < 3:
                 self.journal("Boost cooling due to high CPU temp")
-                self.boost_cooldown = 10
-                mode = 3
+                self.boost_cooldown = BOOST_CPU_TIME
+                mode = BOOST_CPU_MODE
 
             if mode != self.mode:
                 self.journal(f'Mode: {self.mode} -> {mode} ({PROFILE[mode]})')
@@ -120,6 +126,9 @@ class Server:
             return mode
         except:
             return None
+
+    def journal(self, msg):
+        print(f'CROM Server - {msg}')
 
 class Cooling:
 
@@ -165,23 +174,25 @@ class Rgb:
         self.set_theme(PROFILE[mode][5])
 
     def set_theme(self, theme: str):
-        self.strip("fading", "ffffff 0000ff 00ff00 ff0000")
         if theme == "frost":
             self.ring("fading", "000033 0011ff 0000ff")
             self.logo("fading", "000066 000033")
-            self.strip("fixed", "0000ff")
+            self.strip("fixed", "8888ff")
         elif theme == "cool":
-            self.ring("fading", "330000 ff1100 ff0000")
-            self.logo("fading", "660000 330000")
+            self.ring("fading", "ffffff 444444")
+            self.logo("fading", "111111 333333")
+            self.strip("super-fixed", "0000ff 00ff00 ff0000 0000ff 00ff00 ff0000 0000ff 00ff00 ff0000 0000ff")
         elif theme == "tepid":
-            self.ring("fading", "330000 ff1100 ff0000", "fastest")
-            self.logo("fading", "660000 330000", "faster")
+            self.ring("fading", "440000 ff1100 ff0000")
+            self.logo("fading", "660000 330000")
+            self.strip("fading", "ffffff 0000ff 00ff00 ff0000", "slower")
         elif theme == "warm":
+            self.ring("fading", "330000 ff2200 ff0000", "fastest")
+            self.logo("fading", "880000 330000", "faster")
+            self.strip("fading", "ffffff 0000ff 00ff00 ff0000")
+        elif theme == "toasty":
             self.ring("tai-chi", "ff0000 ff2a00", "fastest")
             self.logo("fading", "880000 881100", "fastest")
-        elif theme == "toasty":
-            self.ring("tai-chi", "ff0000 ff5500", "fastest")
-            self.logo("fading", "aa0000 aa3300", "fastest")
             self.strip("fading", "ff0000 0000ff", "fastest")
         elif theme == "fusion":
             self.ring("wings", "0000ff")
@@ -189,7 +200,7 @@ class Rgb:
             self.strip("spectrum-wave", None, "fastest")
         else: # error feedback
             self.ring("fixed", "000000")
-            self.logo("fading", "660000 000000", "fastest")
+            self.logo("fading", "ff0000 000000", "fastest")
             self.strip("alternating-3", "ffffff ff0000", "fastest")
 
     def ring(self, mode, colors, speed = "normal"):
