@@ -201,12 +201,20 @@ class Cooling:
 
 class Rgb:
 
+    first_run = True
+
     def __init__(self, aio, case) -> None:
         self.aio = aio
         self.case = case
 
     def set_mode(self, mode: int):
-        self.set_theme(PROFILE[mode][5])
+        if self.first_run:
+            self.first_run = False
+            self.set_theme("init")
+            time.sleep(1)
+            self.set_mode(mode)
+        else:
+            self.set_theme(PROFILE[mode][5])
 
     def set_theme(self, theme: str):
         if theme == "frost":
@@ -233,6 +241,10 @@ class Rgb:
             self.ring("wings", "0000ff")
             self.logo("spectrum-wave", None, "fastest")
             self.strip("spectrum-wave", None, "fastest")
+        elif theme == "init":
+            self.ring("fixed", "00ff00")
+            self.logo("fixed", "00ff00")
+            self.strip("fixed", "00ff00")
         else: # error feedback
             self.ring("fixed", "000000")
             self.logo("fading", "ff0000 000000", "fastest")
