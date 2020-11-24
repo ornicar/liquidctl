@@ -1,8 +1,39 @@
-import logging
 import time
 from dataclasses import dataclass
 
-from liquidctl.util import color_from_str
+# Control the pump duty, fans duty, and RGB
+# using a Kraken pump and Smart Device V2
+# -----------------------------------------
+#
+# Cooling mostly depends on the AIO water temperature,
+# because that is what the radiator is cooling.
+# However the CPU temperature is monitored as well
+# and can trigger a cooling boost if necessary.
+#
+# This reads from /tmp/crom-cpu-monitor
+# and writes to   /tmp/crom-aio-monitor and /tmp/crom-case-monitor
+#
+# Manual mode is available by writing it to /tmp/crom-mode.
+# echo 3 > /tmp/crom-mode
+
+PROFILE = [
+    # water     aio     cpu     rear    top     RGB
+    # tempº     pump%   duty%   duty%   duty%   theme
+    [0,         30,     0,      0,      0,      "frost"],
+    [26,        45,     30,     0,      0,      "cool"],
+    [27,        60,     50,     40,     0,      "tepid"],
+    [28,        75,     70,     40,     40,     "warm"],
+    [29,        90,     100,    60,     60,     "toasty"],
+    [30,        100,    100,    100,    100,    "fusion"]
+]
+
+BOOST_CPU_TEMP = 70
+BOOST_CPU_MODE = 3
+BOOST_CPU_TIME = 15
+ERROR_MODE = 3
+FAN_CPU = "fan1"
+FAN_REAR = "fan2"
+FAN_TOP = "fan3"
 
 @dataclass
 class CoolerStatus:
@@ -29,23 +60,6 @@ class CoolingStatus:
 class CromStatus:
     cooling: CoolingStatus
     cpu_temp: int
-
-PROFILE = [
-    # water     aio     cpu     rear    top     RGB
-    # tempº     pump%   duty%   duty%   duty%   theme
-    [0,         30,     0,      0,      0,      "frost"],
-    [26,        45,     30,     0,      0,      "cool"],
-    [27,        60,     50,     40,     0,      "tepid"],
-    [28,        75,     70,     40,     40,     "warm"],
-    [29,        90,     100,    60,     60,     "toasty"],
-    [30,        100,    100,    100,    100,    "fusion"]
-]
-
-BOOST_CPU_TEMP = 70
-BOOST_CPU_MODE = 3
-BOOST_CPU_TIME = 15
-
-ERROR_MODE = 3
 
 class Server:
 
@@ -94,6 +108,7 @@ class Server:
 
     def mode_from_water_temp(self, temp: float):
         for m, c in enumerate(PROFILE):
+            # wait for a 0.3º reduction to avoid switching modes too often
             if (temp == c[0] - 0.1 or temp == c[0] - 0.2) and m == self.mode:
                 mode = m
                 break
@@ -105,15 +120,15 @@ class Server:
     def write_status(self, status: CoolingStatus):
         k = status.cooling.aio
         ks = str(f'{k.water_temp} {k.pump.duty} {k.pump.rpm}')
-        open("/tmp/aio-monitor", "w").write(ks)
+        open("/tmp/crom-aio-monitor", "w").write(ks)
 
         c = status.cooling.case
         cs = str(f'{c.cpu_fan.duty} {c.rear_fan.duty} {c.top_fan.duty}')
-        open("/tmp/case-monitor", "w").write(cs)
+        open("/tmp/crom-case-monitor", "w").write(cs)
 
     def read_cpu_temp(self):
         try:
-            return int(open("/tmp/cpu-monitor").read().split(' ')[1])
+            return int(open("/tmp/crom-cpu-monitor").read().split(' ')[1])
         except Exception as e:
             self.journal(e)
             return 99 # assume the worst
@@ -160,9 +175,9 @@ class Cooling:
     def set_mode(self, mode: int):
         _, pump, cpu, rear, top, *_ = PROFILE[mode]
         self.aio.set_fixed_speed("pump", pump)
-        self.case.set_fixed_speed("fan1", cpu)
-        self.case.set_fixed_speed("fan2", rear)
-        self.case.set_fixed_speed("fan3", top)
+        self.case.set_fixed_speed(FAN_CPU, cpu)
+        self.case.set_fixed_speed(FAN_REAR, rear)
+        self.case.set_fixed_speed(FAN_TOP, top)
 
 class Rgb:
 
@@ -213,4 +228,5 @@ class Rgb:
         self.case.set_color("led1", mode, self.color_map(colors), speed=speed)
 
     def color_map(self, colors: str):
+        from liquidctl.util import color_from_str
         return map(color_from_str, colors.split(' ') if colors else [])
