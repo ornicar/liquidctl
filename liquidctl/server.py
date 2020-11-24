@@ -15,6 +15,13 @@ from dataclasses import dataclass
 #
 # Manual mode is available by writing it to /tmp/crom-mode.
 # echo 3 > /tmp/crom-mode
+#
+# Goals:
+# - silent during low CPU load
+# - rapid ramp up during high load
+# - avoid mode flickering
+# - ensure positive pressure
+# - safety by setting high cooling on error
 
 PROFILE = [
     # water     aio     cpu     rear    top     RGB
