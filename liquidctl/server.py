@@ -6,6 +6,13 @@ from dataclasses import dataclass
 # using a Kraken pump and Smart Device V2
 # -----------------------------------------
 #
+# Goals:
+# - silent during low CPU load
+# - rapid ramp up during high load
+# - avoid mode flickering
+# - ensure positive pressure
+# - safety by setting high cooling on error
+#
 # Cooling mostly depends on the AIO water temperature,
 # because that is what the radiator is cooling.
 # However the CPU temperature is monitored as well
@@ -16,13 +23,6 @@ from dataclasses import dataclass
 #
 # Manual mode is available by writing it to /tmp/crom-mode.
 # echo 3 > /tmp/crom-mode
-#
-# Goals:
-# - silent during low CPU load
-# - rapid ramp up during high load
-# - avoid mode flickering
-# - ensure positive pressure
-# - safety by setting high cooling on error
 
 PROFILE = [
     # water     aio     cpu     rear    top     RGB
