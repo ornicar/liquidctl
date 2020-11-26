@@ -11,7 +11,7 @@ from dataclasses import dataclass
 # - rapid ramp up during high load
 # - avoid mode flickering
 # - ensure positive pressure
-# - safety by setting high cooling on error
+# - safety by setting high cooling on stop or error
 #
 # Cooling mostly depends on the AIO water temperature,
 # because that is what the radiator is cooling.
@@ -28,10 +28,10 @@ PROFILE = [
     # water     aio     cpu     rear    top     RGB
     # tempº     pump%   duty%   duty%   duty%   theme
     [0,         30,     0,      0,      0,      "frost"],
-    [26,        45,     30,     0,      0,      "cool"],
-    [27,        60,     50,     40,     0,      "tepid"],
-    [28,        75,     70,     40,     40,     "warm"],
-    [29,        90,     100,    60,     60,     "toasty"],
+    [26,        45,     30,     25,     25,     "cool"],
+    [27,        60,     40,     30,     30,     "tepid"],
+    [28,        77,     70,     50,     50,     "warm"],
+    [29,        100,    100,    70,     70,     "toasty"],
     [30,        100,    100,    100,    100,    "fusion"]
 ]
 
@@ -111,7 +111,7 @@ class Server:
                 mode = BOOST_CPU_MODE
 
             if mode != self.mode:
-                self.journal(f'Mode: {self.mode} -> {mode} ({PROFILE[mode]})')
+                self.journal(f'Mode: {self.mode} -> {mode} {PROFILE[mode]} cpu: {status.cpu_temp}º water: {status.cooling.aio.water_temp}º')
                 self.mode = mode
                 self.rgb.set_mode(mode)
                 self.cooling.set_mode(mode)
