@@ -83,24 +83,32 @@ The following devices are supported by this version of liquidctl.  See each guid
 | NZXT Kraken X53, X63, X73 | [guide](docs/kraken-x3-z3-guide.md) | <sup>_E_</sup> |
 | NZXT Kraken Z63, Z73 | [guide](docs/kraken-x3-z3-guide.md) | <sup>_E_</sup> |
 
-### Other parts
+### Fan controllers and power supplies
 
 | Device family | Usage | Notes |
 |:--- |:---:|:--- |
 | Corsair HX750i, HX850i, HX1000i, HX1200i | [guide](docs/corsair-hxi-rmi-psu-guide.md) | |
 | Corsair RM650i, RM750i, RM850i, RM1000i | [guide](docs/corsair-hxi-rmi-psu-guide.md) | |
-| Gigabyte RGB Fusion 2.0 Motherboards | [guide](docs/gigabyte-rgb-fusion2-guide.md) | <sup>_E_</sup> |
 | NZXT E500, E650, E850 (PSUs) | [guide](docs/nzxt-e-series-psu-guide.md) | <sup>_E_</sup> |
 | NZXT Grid+ V3  | [guide](docs/nzxt-smart-device-v1-guide.md) | |
-| NZXT HUE 2, HUE 2 Ambient | [guide](docs/nzxt-hue2-guide.md) | |
 | NZXT Smart Device | [guide](docs/nzxt-smart-device-v1-guide.md) | |
 | NZXT Smart Device V2 | [guide](docs/nzxt-hue2-guide.md) | |
 | NZXT RGB & Fan Controller | [guide](docs/nzxt-hue2-guide.md) | <sup>_E_</sup> |
 
+### Other parts
+
+| Device family | Usage | Notes |
+|:--- |:---:|:--- |
+| Gigabyte RGB Fusion 2.0 Motherboards | [guide](docs/gigabyte-rgb-fusion2-guide.md) | <sup>_E_</sup> |
+| EVGA GTX 1080 FTW | [guide](docs/nvidia-guide.md) | <sup>_EUXN_</sup> |
+| NZXT HUE 2, HUE 2 Ambient | [guide](docs/nzxt-hue2-guide.md) | |
+
 <sup>_L_</sup> _Requires the `--legacy-690lc` flag._  
 <sup>_Z_</sup> _Requires replacing the device driver [on Windows](#installing-on-windows)._  
 <sup>_E_</sup> _Experimental and/or partial support._  
-<!--<sup>_U_</sup> _Starting with upcoming liquidctl <version>._  -->
+<sup>_U_</sup> _Requires `--unsafe` features._  
+<sup>_X_</sup> _Only supported on Linux._  
+<sup>_N_</sup> _New driver, only available on git._  
 
 
 ## Installing on Linux
@@ -122,6 +130,7 @@ On other distributions, or when more control is desired, liquidctl can be instal
 | docopt | python-docopt | python3-docopt | python3-docopt |
 | PyUSB | python-pyusb | python3-pyusb | python3-usb |
 | cython-hidapi | python-hidapi | python3-hidapi | python3-hid |
+| smbus (optional) | i2c-tools | python3-i2c-tools | python3-smbus |
 
 Setuptools and, optionally, pip and pytest are needed to locally test and manually install liquidctl:
 
@@ -152,6 +161,21 @@ $ python -m liquidctl.cli <args>...
 
 _Note: in systems that default to Python 2, use `pip3`, `python3` and `pytest-3`._  
 
+Optional steps:
+
+- install man pages
+```
+# cp liquidctl.8 /usr/local/share/man/man8/
+# mandb
+```
+- install [udev rules] for unprivileged access to devices
+- install [modules-load configuration] for SMBus/I²C support
+- install [bash completions] for liquidctl
+
+[udev rules]: extra/linux/71-liquidctl.rules
+[modules-load configuration]: extra/linux/modules-load.conf
+[bash completions]: extra/completions/liquidctl.bash
+
 
 ## Installing on Windows
 
@@ -163,9 +187,11 @@ Products that are not Human Interface Devices (HIDs), or that do not use the Mic
 
 The pre-built executables can be directly used from a Windows Command Prompt, Power Shell or other available terminal emulator.  Even so, most users will want to place the executable in a directory listed in [the `PATH` environment variable](https://en.wikipedia.org/wiki/PATH_(variable)), or change the variable so that is true; this allows omitting the full path and `.exe` extension when calling `liquidctl`.
 
-_Alternatively to the pre-built executable,_ it is possible to install liquidctl from PyPI or directly from the source code repository.  Pre-build liquidctl executables for Windows already include Python and libusb, but when installing from PyPI or the sources both of these will need to be manually set up.
+_Alternatively to the pre-built executable,_ it is possible to install liquidctl from PyPI or directly from the source code repository.  This is useful to contribute fixes or improvements to liquidctl, or to use advanced features like the liquidctl API.
 
-The libusb DLLs can be found in [libusb/releases](https://github.com/libusb/libusb/releases) (part of the `libusb-<version>.7z` files) and the appropriate (e.g. MS64) `.dll` and `.lib` files should be extracted to the system or python installation directory (e.g. `C:\Windows\System32` or `C:\Python36`).
+Since HWiNFO 6.10 it is possible for other programs to send additional sensor data in through a Windows Registry API, and [`LQiNFO.py`](extra/windows/LQiNFO.py) is an experimental program that uses the liquidctl API to take advantage of this feature.
+
+Pre-build liquidctl executables for Windows already include Python and libusb, but when installing from PyPI or the sources both of these will need to be manually set up.  The libusb DLLs can be found in [libusb/releases](https://github.com/libusb/libusb/releases) (part of the `libusb-<version>.7z` files) and the appropriate (e.g. MS64) `.dll` and `.lib` files should be extracted to the system or python installation directory (e.g. `C:\Windows\System32` or `C:\Python36`).
 
 To install any release from PyPI, *pip* should be used:
 
