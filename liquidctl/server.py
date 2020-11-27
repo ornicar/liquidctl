@@ -31,16 +31,18 @@ PROFILE = [
     # water     aio     cpu     rear    top     RGB
     # tempº     pump%   duty%   duty%   duty%   theme
     [0,         30,     0,      0,      0,      "frost"],
-    [26,        45,     30,     25,     25,     "cool"],
-    [27,        60,     40,     30,     30,     "tepid"],
-    [28,        77,     70,     50,     50,     "warm"],
-    [29,        100,    100,    70,     70,     "toasty"],
+    [26,        45,     30,     30,     30,     "cool"],
+    [27,        60,     40,     40,     40,     "tepid"],
+    [28,        77,     70,     60,     60,     "warm"],
+    [29,        100,    100,    80,     80,     "toasty"],
     [30,        100,    100,    100,    100,    "fusion"]
 ]
 
 BOOST_CPU_TEMP = 69
 BOOST_CPU_MODE = 3
 BOOST_CPU_TIME = 15
+BOOST_GPU_TEMP = 63
+BOOST_GPU_MODE = 3
 SAFE_MODE = 3
 FAN_CPU = "fan1"
 FAN_REAR = "fan2"
@@ -72,6 +74,7 @@ class CoolingStatus:
 class CromStatus:
     cooling: CoolingStatus
     cpu_temp: int
+    gpu_temp: int
 
 class Server:
 
@@ -82,6 +85,7 @@ class Server:
     def __init__(self, aio, case):
         self.cooling = Cooling(aio, case)
         self.rgb = Rgb(aio, case)
+        self.gpu = Gpu()
 
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
@@ -97,7 +101,7 @@ class Server:
             if not self.keep_running:
                 self.safe_mode()
                 break
-            status = CromStatus(self.cooling.status(), self.read_cpu_temp())
+            status = CromStatus(self.cooling.status(), self.read_cpu_temp(), self.read_gpu_temp())
             self.write_status(status)
 
             mode = self.mode_from_water_temp(status.cooling.aio.water_temp)
@@ -110,9 +114,14 @@ class Server:
                     self.boost_cooldown -= 1
                 mode = max(BOOST_CPU_MODE, mode)
             elif status.cpu_temp >= BOOST_CPU_TEMP and mode < BOOST_CPU_MODE:
-                self.journal("Boost cooling due to high CPU temp")
+                self.journal(f'Boost cooling due to high CPU temp: {mode} -> {BOOST_CPU_MODE}')
                 self.boost_cooldown = BOOST_CPU_TIME
                 mode = BOOST_CPU_MODE
+
+            if status.gpu_temp >= BOOST_GPU_TEMP and mode < BOOST_GPU_MODE:
+                if self.mode < BOOST_GPU_MODE:
+                    self.journal(f'Boost cooling due to high GPU temp: {mode} -> {BOOST_GPU_MODE}')
+                mode = BOOST_GPU_MODE
 
             if mode != self.mode:
                 self.journal(f'Mode: {self.mode} -> {mode} {PROFILE[mode]} cpu: {status.cpu_temp}º water: {status.cooling.aio.water_temp}º')
@@ -124,6 +133,8 @@ class Server:
                 self.journal("Toggle RGB")
                 self.rgb.off = not self.rgb.off
                 self.rgb.set_mode(mode)
+
+            self.gpu.adjust(status.gpu_temp)
 
             time.sleep(1)
 
@@ -154,6 +165,13 @@ class Server:
             self.journal(e)
             return 99 # assume the worst
 
+    def read_gpu_temp(self):
+        try:
+            return int(open(f'{RUN_DIR}/gpu-monitor').read().split(' ')[1])
+        except Exception as e:
+            self.journal(e)
+            return 99 # assume the worst
+
     def read_manual_mode(self):
         try:
             mode = max(0, min(len(PROFILE) - 1, int(open(f'{RUN_DIR}/mode').read())))
@@ -176,6 +194,7 @@ class Server:
     def safe_mode(self):
         self.rgb.set_theme("error")
         self.cooling.set_mode(SAFE_MODE)
+        self.gpu.set_safe_mode()
 
     def journal(self, msg):
         print(f'CROM Server - {msg}')
@@ -282,3 +301,58 @@ class Rgb:
     def color_map(self, colors: str):
         from liquidctl.util import color_from_str
         return map(color_from_str, colors.split(' ') if colors else [])
+
+class Gpu:
+    profile = [
+        # tempº     fan%
+        [0,         0],
+        [55,        37],
+        [60,        50],
+        [65,        60],
+        [70,        70],
+        [75,        80],
+        [80,        100]
+    ]
+    mode = -1
+    sysfs_dir = '/sys/class/drm/card0/device'
+    hwmon_dir = f'{sysfs_dir}/hwmon/hwmon3'
+
+    def __init__(self) -> None:
+        self.write_manual_pwm()
+        self.write_manual_power_profile()
+
+    def adjust(self, temp: int):
+        mode = self.mode_from_temp(temp)
+        if mode != self.mode:
+            self.journal(f'Mode: {self.mode} -> {mode} fan: {self.profile[mode][1]}% temp: {temp}º')
+            self.write_mode(mode)
+            self.mode = mode
+
+    def set_safe_mode(self):
+        self.write_mode(2)
+
+    def write_mode(self, mode: int):
+        percent = self.profile[mode][1]
+        pwm = int(percent / 100 * 255)
+        open(f'{self.hwmon_dir}/pwm1', "w").write(str(pwm))
+
+    def write_manual_pwm(self):
+        open(f'{self.hwmon_dir}/pwm1_enable', "w").write("1")
+
+    def write_manual_power_profile(self):
+        open(f'{self.sysfs_dir}/power_dpm_force_performance_level', "w").write("manual")
+        open(f'{self.sysfs_dir}/pp_power_profile_mode', "w").write("2")
+
+    def mode_from_temp(self, temp: int):
+        for m, c in enumerate(self.profile):
+            # wait for a 5º reduction to avoid switching modes too often
+            if (temp < c[0] and temp > c[0] - 5) and m == self.mode:
+                mode = m
+                break
+            if temp < c[0]:
+                break
+            mode = m
+        return mode
+
+    def journal(self, msg):
+        print(f'CROM GPU    - {msg}')
