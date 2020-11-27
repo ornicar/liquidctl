@@ -7,6 +7,9 @@ from dataclasses import dataclass
 # using a Kraken pump and Smart Device V2
 # -----------------------------------------
 #
+# This code is only intended to work for my
+# very specific build. Don't try it on yours!
+#
 # Goals:
 # - silent during low CPU load
 # - rapid ramp up during high load
@@ -302,6 +305,7 @@ class Rgb:
         from liquidctl.util import color_from_str
         return map(color_from_str, colors.split(' ') if colors else [])
 
+# https://dri.freedesktop.org/docs/drm/gpu/amdgpu.html
 class Gpu:
     profile = [
         # tempº     fan%
