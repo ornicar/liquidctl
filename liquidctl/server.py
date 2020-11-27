@@ -4,7 +4,8 @@ import os
 from dataclasses import dataclass
 
 # Control the pump duty, fans duty, and RGB
-# using a Kraken pump and Smart Device V2
+# of a Kraken pump and Smart Device V2.
+# Also controls power and fans of a RX 580 GPU.
 # -----------------------------------------
 #
 # This code is only intended to work for my
