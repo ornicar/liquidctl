@@ -1,5 +1,6 @@
 import signal
 import time
+import os
 from dataclasses import dataclass
 
 # Control the pump duty, fans duty, and RGB
@@ -18,11 +19,13 @@ from dataclasses import dataclass
 # However the CPU temperature is monitored as well
 # and can trigger a cooling boost if necessary.
 #
-# This reads from /tmp/crom-cpu-monitor
-# and writes to   /tmp/crom-aio-monitor and /tmp/crom-case-monitor
+# Reads from /run/crom/cpu-monitor
+# Writes to  /run/crom/aio-monitor and /run/crom/case-monitor
 #
-# Manual mode is available by writing it to /tmp/crom-mode.
-# echo 3 > /tmp/crom-mode
+# Manual mode is available by writing it to /run/crom/mode.
+# echo 3 > /run/crom/mode
+# Disabling RGB is done by creating /run/crom/rgb-off.
+# touch /run/crom/rgb-off
 
 PROFILE = [
     # water     aio     cpu     rear    top     RGB
@@ -42,6 +45,7 @@ SAFE_MODE = 3
 FAN_CPU = "fan1"
 FAN_REAR = "fan2"
 FAN_TOP = "fan3"
+RUN_DIR = "/run/crom"
 
 @dataclass
 class CoolerStatus:
@@ -74,6 +78,7 @@ class Server:
     mode = -1
     boost_cooldown = 0
     keep_running = True
+    rgb_off = False
 
     def __init__(self, aio, case):
         self.cooling = Cooling(aio, case)
@@ -116,6 +121,11 @@ class Server:
                 self.rgb.set_mode(mode)
                 self.cooling.set_mode(mode)
 
+            if os.path.isfile(f'{RUN_DIR}/rgb-off') != self.rgb_off:
+                self.journal("Toggle RGB")
+                self.rgb_off = not self.rgb_off
+                self.rgb.set_mode(mode)
+
             time.sleep(1)
 
     def mode_from_water_temp(self, temp: float):
@@ -132,22 +142,22 @@ class Server:
     def write_status(self, status: CoolingStatus):
         k = status.cooling.aio
         ks = str(f'{k.water_temp} {k.pump.duty} {k.pump.rpm}')
-        open("/tmp/crom-aio-monitor", "w").write(ks)
+        open(f'{RUN_DIR}/aio-monitor', "w").write(ks)
 
         c = status.cooling.case
         cs = str(f'{c.cpu_fan.duty} {c.rear_fan.duty} {c.top_fan.duty}')
-        open("/tmp/crom-case-monitor", "w").write(cs)
+        open(f'{RUN_DIR}/case-monitor', "w").write(cs)
 
     def read_cpu_temp(self):
         try:
-            return int(open("/tmp/crom-cpu-monitor").read().split(' ')[1])
+            return int(open(f'{RUN_DIR}/cpu-monitor').read().split(' ')[1])
         except Exception as e:
             self.journal(e)
             return 99 # assume the worst
 
     def read_manual_mode(self):
         try:
-            mode = max(0, min(len(PROFILE) - 1, int(open("/tmp/crom-mode").read())))
+            mode = max(0, min(len(PROFILE) - 1, int(open(f'{RUN_DIR}/mode').read())))
             if mode != self.mode:
                 self.journal(f'Manual mode: {mode}')
             return mode
@@ -217,7 +227,11 @@ class Rgb:
             self.set_theme(PROFILE[mode][5])
 
     def set_theme(self, theme: str):
-        if theme == "frost":
+        if os.path.exists(f'{RUN_DIR}/rgb-off') and theme != "error":
+            self.ring("off", None)
+            self.logo("fixed", "002200")
+            self.strip("off", None)
+        elif theme == "frost":
             self.ring("fading", "000033 0011ff 0000ff")
             self.logo("fading", "000066 000033")
             self.strip("fixed", "8888ff")
@@ -246,9 +260,9 @@ class Rgb:
             self.logo("fixed", "00ff00")
             self.strip("fixed", "00ff00")
         else: # error feedback
-            self.ring("fixed", "000000")
+            self.ring("off", None)
             self.logo("fading", "ff0000 000000", "fastest")
-            self.strip("alternating-3", "ffffff ff0000", "fastest")
+            self.strip("off", None)
 
     def ring(self, mode, colors, speed = "normal"):
         self.aio.set_color("ring", mode, self.color_map(colors), speed=speed)
