@@ -78,7 +78,6 @@ class Server:
     mode = -1
     boost_cooldown = 0
     keep_running = True
-    rgb_off = False
 
     def __init__(self, aio, case):
         self.cooling = Cooling(aio, case)
@@ -109,8 +108,8 @@ class Server:
             if self.boost_cooldown:
                 if status.cpu_temp < BOOST_CPU_TEMP:
                     self.boost_cooldown -= 1
-                mode = max(3, mode)
-            elif status.cpu_temp >= BOOST_CPU_TEMP and mode < 3:
+                mode = max(BOOST_CPU_MODE, mode)
+            elif status.cpu_temp >= BOOST_CPU_TEMP and mode < BOOST_CPU_MODE:
                 self.journal("Boost cooling due to high CPU temp")
                 self.boost_cooldown = BOOST_CPU_TIME
                 mode = BOOST_CPU_MODE
@@ -121,9 +120,9 @@ class Server:
                 self.rgb.set_mode(mode)
                 self.cooling.set_mode(mode)
 
-            if os.path.isfile(f'{RUN_DIR}/rgb-off') != self.rgb_off:
+            if self.read_rgb_off() != self.rgb.off:
                 self.journal("Toggle RGB")
-                self.rgb_off = not self.rgb_off
+                self.rgb.off = not self.rgb.off
                 self.rgb.set_mode(mode)
 
             time.sleep(1)
@@ -163,6 +162,12 @@ class Server:
             return mode
         except:
             return None
+
+    def read_rgb_off(self):
+        try:
+            return open(f'{RUN_DIR}/rgb-off').read().startswith("1")
+        except:
+            return False
 
     def exit_gracefully(self, signum, frame):
         self.journal("Stop")
@@ -212,6 +217,7 @@ class Cooling:
 class Rgb:
 
     first_run = True
+    off = False
 
     def __init__(self, aio, case) -> None:
         self.aio = aio
@@ -227,7 +233,7 @@ class Rgb:
             self.set_theme(PROFILE[mode][5])
 
     def set_theme(self, theme: str):
-        if os.path.exists(f'{RUN_DIR}/rgb-off') and theme != "error":
+        if self.off and theme != "error":
             self.ring("off", None)
             self.logo("fixed", "002200")
             self.strip("off", None)
