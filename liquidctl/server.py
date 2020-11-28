@@ -17,19 +17,20 @@ from dataclasses import dataclass
 # - avoid mode flickering
 # - ensure positive pressure
 # - safety by setting high cooling on stop or error
+# - instant boost on high cpu or gpu temp
 #
 # Cooling mostly depends on the AIO water temperature,
 # because that is what the radiator is cooling.
 # However the CPU temperature is monitored as well
 # and can trigger a cooling boost if necessary.
 #
-# Reads from /run/crom/cpu-monitor
+# Reads from /run/crom/cpu-monitor and /run/crom/gpu-monitor
 # Writes to  /run/crom/aio-monitor and /run/crom/case-monitor
 #
 # Manual mode is available by writing it to /run/crom/mode.
 # echo 3 > /run/crom/mode
 # Disabling RGB is done by creating /run/crom/rgb-off.
-# touch /run/crom/rgb-off
+# echo 1 > /run/crom/rgb-off
 
 PROFILE = [
     # water     aio     cpu     rear    top     RGB
