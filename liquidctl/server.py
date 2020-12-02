@@ -38,9 +38,10 @@ PROFILE = [
     [0,         30,     0,      0,      0,      "frost"],
     [26,        45,     30,     30,     30,     "cool"],
     [27,        60,     40,     40,     40,     "tepid"],
-    [28,        77,     70,     60,     60,     "warm"],
-    [29,        100,    100,    80,     80,     "toasty"],
-    [30,        100,    100,    100,    100,    "fusion"]
+    [28,        77,     65,     60,     60,     "warm"],
+    [29,        100,    70,     65,     65,     "toasty"],
+    [30,        100,    92,     85,     85,     "burning"],
+    [31,        100,    100,    100,    100,    "fusion"]
 ]
 
 BOOST_CPU_TEMP = 69
@@ -106,7 +107,7 @@ class Server:
             if not self.keep_running:
                 self.safe_mode()
                 break
-            status = CromStatus(self.cooling.status(), self.read_cpu_temp(), self.read_gpu_temp())
+            status = CromStatus(self.cooling.status(), self.read_cpu_temp(), self.gpu.read_temp())
             self.write_status(status)
 
             mode = self.mode_from_water_temp(status.cooling.aio.water_temp)
@@ -145,8 +146,8 @@ class Server:
 
     def mode_from_water_temp(self, temp: float):
         for m, c in enumerate(PROFILE):
-            # wait for a 0.3º reduction to avoid switching modes too often
-            if (temp == c[0] - 0.1 or temp == c[0] - 0.2) and m == self.mode:
+            # wait for a 0.4º reduction to avoid switching modes too often
+            if (temp < c[0] and temp > c[0] - 0.4) and m == self.mode:
                 mode = m
                 break
             if temp < c[0]:
@@ -166,13 +167,6 @@ class Server:
     def read_cpu_temp(self):
         try:
             return int(open(f'{RUN_DIR}/cpu-monitor').read().split(' ')[1])
-        except Exception as e:
-            self.journal(e)
-            return 99 # assume the worst
-
-    def read_gpu_temp(self):
-        try:
-            return int(open(f'{RUN_DIR}/gpu-monitor').read().split(' ')[1])
         except Exception as e:
             self.journal(e)
             return 99 # assume the worst
@@ -222,7 +216,7 @@ class Cooling:
         return CoolingStatus(
             AioStatus(
                 water_temp,
-                CoolerStatus(int(ks[1][1]), int(ks[2][1]))
+                CoolerStatus(int(ks[2][1]), int(ks[1][1]))
             ),
             CaseStatus(
                 CoolerStatus(fan_value(1, "duty"), fan_value(1, "speed")),
@@ -273,11 +267,11 @@ class Rgb:
             self.ring("fading", "440000 ff1100 ff0000")
             self.logo("fading", "660000 330000")
             self.strip("fading", "ffffff 0000ff 00ff00 ff0000", "slower")
-        elif theme == "warm":
-            self.ring("fading", "330000 ff2200 ff0000", "fastest")
+        elif theme == "warm" or theme == "toasty":
+            self.ring("fading", "330000 ff2200 ff0000", "faster")
             self.logo("fading", "880000 330000", "faster")
             self.strip("fading", "ffffff 0000ff 00ff00 ff0000")
-        elif theme == "toasty":
+        elif theme == "burning":
             self.ring("tai-chi", "ff0000 ff2a00", "fastest")
             self.logo("fading", "880000 881100", "fastest")
             self.strip("fading", "ff0000 0000ff", "fastest")
@@ -313,13 +307,11 @@ class Gpu:
         # tempº     fan%
         [0,         0],
         [55,        37],
-        [60,        50],
         [65,        60],
-        [70,        70],
-        [75,        80],
-        [80,        100]
+        [75,        100]
     ]
     mode = -1
+    last_set = time.time()
     sysfs_dir = '/sys/class/drm/card0/device'
     hwmon_dir = f'{sysfs_dir}/hwmon/hwmon3'
 
@@ -333,32 +325,53 @@ class Gpu:
             self.journal(f'Mode: {self.mode} -> {mode} fan: {self.profile[mode][1]}% temp: {temp}º')
             self.write_mode(mode)
             self.mode = mode
+        elif time.time() > self.last_set + 600:
+            self.journal("Periodically set manual PWM and mode")
+            self.write_manual_pwm()
+            self.write_mode(mode)
 
     def set_safe_mode(self):
         self.write_mode(2)
 
     def write_mode(self, mode: int):
-        percent = self.profile[mode][1]
-        pwm = int(percent / 100 * 255)
-        open(f'{self.hwmon_dir}/pwm1', "w").write(str(pwm))
+        try:
+            percent = self.profile[mode][1]
+            pwm = int(percent / 100 * 255)
+            open(f'{self.hwmon_dir}/pwm1', "w").write(str(pwm))
+            self.last_set = time.time()
+        except Exception as e:
+            self.journal(e)
 
     def write_manual_pwm(self):
-        open(f'{self.hwmon_dir}/pwm1_enable', "w").write("1")
+        try:
+            open(f'{self.hwmon_dir}/pwm1_enable', "w").write("1")
+        except Exception as e:
+            self.journal(e)
 
     def write_manual_power_profile(self):
-        open(f'{self.sysfs_dir}/power_dpm_force_performance_level', "w").write("manual")
-        open(f'{self.sysfs_dir}/pp_power_profile_mode', "w").write("2")
+        try:
+            open(f'{self.sysfs_dir}/power_dpm_force_performance_level', "w").write("manual")
+            open(f'{self.sysfs_dir}/pp_power_profile_mode', "w").write("2")
+        except Exception as e:
+            self.journal(e)
 
     def mode_from_temp(self, temp: int):
         for m, c in enumerate(self.profile):
-            # wait for a 5º reduction to avoid switching modes too often
-            if (temp < c[0] and temp > c[0] - 5) and m == self.mode:
+            # wait for a 8º reduction to avoid switching modes too often
+            if (temp < c[0] and temp > c[0] - 8) and m == self.mode:
                 mode = m
                 break
             if temp < c[0]:
                 break
             mode = m
         return mode
+
+    def read_temp(self):
+        try:
+            return int(open(f'{RUN_DIR}/gpu-monitor').read().split(' ')[1])
+        except Exception as e:
+            self.journal(e)
+            return 99 # assume the worst
 
     def journal(self, msg):
         print(f'CROM GPU    - {msg}')
