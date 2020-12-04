@@ -1,6 +1,5 @@
 import signal
 import time
-import os
 from dataclasses import dataclass
 
 # Control the pump duty, fans duty, and RGB
@@ -35,13 +34,13 @@ from dataclasses import dataclass
 PROFILE = [
     # water     aio     cpu     rear    top     RGB
     # tempº     pump%   duty%   duty%   duty%   theme
-    [0,         30,     0,      0,      0,      "frost"],
-    [26,        45,     30,     30,     30,     "cool"],
-    [27,        60,     40,     40,     40,     "tepid"],
-    [28,        77,     65,     60,     60,     "warm"],
-    [29,        100,    70,     65,     65,     "toasty"],
-    [30,        100,    92,     85,     85,     "burning"],
-    [31,        100,    100,    100,    100,    "fusion"]
+    (0,         30,     0,      0,      0,      "frost"),
+    (26,        45,     30,     30,     30,     "cool"),
+    (27,        60,     40,     40,     40,     "tepid"),
+    (28,        77,     65,     60,     60,     "warm"),
+    (29,        100,    70,     65,     65,     "toasty"),
+    (30,        100,    92,     85,     85,     "burning"),
+    (31,        100,    100,    100,    100,    "fusion")
 ]
 
 BOOST_CPU_TEMP = 69
@@ -145,6 +144,7 @@ class Server:
             time.sleep(1)
 
     def mode_from_water_temp(self, temp: float):
+        mode = len(PROFILE) - 1
         for m, c in enumerate(PROFILE):
             # wait for a 0.4º reduction to avoid switching modes too often
             if (temp < c[0] and temp > c[0] - 0.4) and m == self.mode:
@@ -155,13 +155,13 @@ class Server:
             mode = m
         return mode
 
-    def write_status(self, status: CoolingStatus):
+    def write_status(self, status: CromStatus):
         k = status.cooling.aio
-        ks = str(f'{k.water_temp} {k.pump.duty} {k.pump.rpm}')
+        ks = str(f'{k.water_temp} {k.pump.duty} {k.pump.rpm}\n')
         open(f'{RUN_DIR}/aio-monitor', "w").write(ks)
 
         c = status.cooling.case
-        cs = str(f'{c.cpu_fan.duty} {c.rear_fan.duty} {c.top_fan.duty}')
+        cs = str(f'{c.cpu_fan.duty} {c.rear_fan.duty} {c.top_fan.duty}\n')
         open(f'{RUN_DIR}/case-monitor', "w").write(cs)
 
     def read_cpu_temp(self):
@@ -253,7 +253,7 @@ class Rgb:
     def set_theme(self, theme: str):
         if self.off and theme != "error":
             self.ring("off", None)
-            self.logo("fixed", "002200")
+            self.logo("fixed", "100060")
             self.strip("off", None)
         elif theme == "frost":
             self.ring("fading", "000033 0011ff 0000ff")
