@@ -356,6 +356,7 @@ class Gpu:
             self.journal(e)
 
     def mode_from_temp(self, temp: int):
+        mode = len(PROFILE) - 1
         for m, c in enumerate(self.profile):
             # wait for a 8º reduction to avoid switching modes too often
             if (temp < c[0] and temp > c[0] - 8) and m == self.mode:
