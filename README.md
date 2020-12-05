@@ -99,6 +99,7 @@ The following devices are supported by this version of liquidctl.  See each guid
 
 | Device family | Usage | Notes |
 |:--- |:---:|:--- |
+| ASUS Strix RTX 2080 Ti OC | [guide](docs/nvidia-guide.md) | <sup>_EUXN_</SUP> |
 | Gigabyte RGB Fusion 2.0 Motherboards | [guide](docs/gigabyte-rgb-fusion2-guide.md) | <sup>_E_</sup> |
 | EVGA GTX 1080 FTW | [guide](docs/nvidia-guide.md) | <sup>_EUXN_</sup> |
 | NZXT HUE 2, HUE 2 Ambient | [guide](docs/nzxt-hue2-guide.md) | |
@@ -116,7 +117,7 @@ The following devices are supported by this version of liquidctl.  See each guid
 Packages for liquidctl are available for certain Linux distributions and package managers:
 
  - Alpine Linux: [liquidctl](https://pkgs.alpinelinux.org/packages?name=liquidctl)
- - ArchLinux/Manjaro: [liquidctl<sup>AUR</sup>](https://aur.archlinux.org/packages/liquidctl/), [liquidctl-git<sup>AUR</sup>](https://aur.archlinux.org/packages/liquidctl-git/)
+ - ArchLinux: [liquidctl](https://www.archlinux.org/packages/community/any/liquidctl/), [liquidctl-git<sup>AUR</sup>](https://aur.archlinux.org/packages/liquidctl-git/)
  - Fedora: [liquidctl](https://src.fedoraproject.org/rpms/liquidctl)
  - Gentoo: [app-misc/liquidctl<sup>GURU</sup>](https://cgit.gentoo.org/repo/proj/guru.git/tree/app-misc/liquidctl)
 
@@ -476,7 +477,8 @@ You are also encouraged to contribute to the documentation and to these examples
 ## License
 
 liquidctl – monitor and control liquid coolers and other devices.  
-Copyright (C) 2018–2020  Jonas Malaco, CaseySJ, Tom Frey and contributors
+Copyright (C) 2018–2020  Jonas Malaco, CaseySJ, Tom Frey, Marshall Asch and
+contributors
 
 liquidctl incorporates work by leaty, Ksenija Stanojevic, Alexander Tong, Jens
 Neumaier, Kristóf Jakab, Sean Nelson, Chris Griffith, notaz, realies and Thomas
