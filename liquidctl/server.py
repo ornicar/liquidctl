@@ -1,6 +1,7 @@
 import signal
 import time
 from dataclasses import dataclass
+from typing import List, Optional
 
 # Control the pump duty, fans duty, and RGB
 # of a Kraken pump and Smart Device V2.
@@ -26,17 +27,9 @@ from dataclasses import dataclass
 # Reads from /run/crom/cpu-monitor and /run/crom/gpu-monitor
 # Writes to  /run/crom/aio-monitor and /run/crom/case-monitor
 #
-# Manual mode is available by writing it to /run/crom/mode.
-# echo 3 > /run/crom/mode
 # Disabling RGB is done by creating /run/crom/rgb-off.
 # echo 1 > /run/crom/rgb-off
 
-# BOOST_CPU_TEMP = 69
-# BOOST_CPU_MODE = 3
-# BOOST_CPU_TIME = 15
-# BOOST_GPU_TEMP = 63
-# BOOST_GPU_MODE = 3
-# SAFE_MODE = 3
 FAN_CPU = "fan1"
 FAN_REAR = "fan2"
 FAN_TOP = "fan3"
@@ -91,55 +84,14 @@ class Server:
                 break
 
             status = CromStatus(self.aio.status(), self.case.status(), self.read_cpu_temp(), self.gpu.read_temp())
-            self.write_status(status)
 
-            # mode = self.mode_from_water_temp(status.cooling.aio.water_temp)
+            self.gpu.tick(status.gpu_temp)
 
-            # manual = self.read_manual_mode()
-            # mode = manual if manual is not None and mode - manual < 2 else mode
+            self.aio.tick(status)
 
-            # if self.boost_cooldown:
-            #     if status.cpu_temp < BOOST_CPU_TEMP:
-            #         self.boost_cooldown -= 1
-            #     mode = max(BOOST_CPU_MODE, mode)
-            # elif status.cpu_temp >= BOOST_CPU_TEMP and mode < BOOST_CPU_MODE:
-            #     self.journal(f'Boost cooling due to high CPU temp: {mode} -> {BOOST_CPU_MODE}')
-            #     self.boost_cooldown = BOOST_CPU_TIME
-            #     mode = BOOST_CPU_MODE
-
-            # if status.gpu_temp >= BOOST_GPU_TEMP and mode < BOOST_GPU_MODE:
-            #     if self.mode < BOOST_GPU_MODE:
-            #         self.journal(f'Boost cooling due to high GPU temp: {mode} -> {BOOST_GPU_MODE}')
-            #     mode = BOOST_GPU_MODE
-
-            # if mode != self.mode:
-            #     self.journal(f'Mode: {self.mode} -> {mode} {PROFILE[mode]} cpu: {status.cpu_temp}º water: {status.cooling.aio.water_temp}º')
-            #     self.mode = mode
-            #     self.rgb.set_mode(mode)
-
-            # if self.read_rgb_off() != self.rgb.off:
-            #     self.journal("Toggle RGB")
-            #     self.rgb.off = not self.rgb.off
-            #     self.rgb.set_mode(mode)
-
-            self.aio.adjust(status)
-
-            new_case_mode = self.case.adjust(status)
-            if new_case_mode is not None:
-                self.rgb.set_mode(new_case_mode)
-
-            self.gpu.adjust(status.gpu_temp)
+            self.rgb.set_theme(self.case.tick(status))
 
             time.sleep(1)
-
-    def write_status(self, status: CromStatus):
-        k = status.aio
-        ks = str(f'{k.water_temp} {k.pump.duty} {k.pump.rpm}\n')
-        open(f'{RUN_DIR}/aio-monitor', "w").write(ks)
-
-        c = status.case
-        cs = str(f'{c.cpu_fan.duty} {c.rear_fan.duty} {c.top_fan.duty}\n')
-        open(f'{RUN_DIR}/case-monitor', "w").write(cs)
 
     def read_cpu_temp(self):
         try:
@@ -147,15 +99,6 @@ class Server:
         except Exception as e:
             self.journal(e)
             return 99 # assume the worst
-
-#     def read_manual_mode(self):
-#         try:
-#             mode = max(0, min(len(PROFILE) - 1, int(open(f'{RUN_DIR}/mode').read())))
-#             if mode != self.mode:
-#                 self.journal(f'Manual mode: {mode}')
-#             return mode
-#         except:
-#             return None
 
     def read_rgb_off(self):
         try:
@@ -179,14 +122,16 @@ class Server:
 class Aio:
 
     mode = -1
+    cpu_temp_hist : List[int] = []
 
     profile = [
-        # CPU       aio     
-        # tempº     pump%  
+        # CPU       aio
+        # tempº     pump%
         (0,         30),
-        (50,        50),
-        (60,        70),
-        (70,        100)
+        (60,        50),
+        (64,        70),
+        (68,        80),
+        (72,        100)
     ]
 
     def __init__(self, aio):
@@ -203,20 +148,21 @@ class Aio:
             CoolerStatus(int(ks[2][1]), int(ks[1][1]))
         )
 
-    def adjust(self, status: CromStatus):
-        mode = self.mode_from_cpu_temp(status.cpu_temp)
+    def tick(self, status: CromStatus):
+        open(f'{RUN_DIR}/aio-monitor', "w").write(
+            str(f'{status.aio.water_temp} {status.aio.pump.duty} {status.aio.pump.rpm}\n'))
+        self.cpu_temp_hist.append(status.cpu_temp)
+        self.cpu_temp_hist = self.cpu_temp_hist[-20:]
+        max_cpu_temp = max(self.cpu_temp_hist)
+        mode = self.mode_from_cpu_temp(max_cpu_temp)
         if mode != self.mode:
-            self.journal(f'Mode: {self.mode} -> {mode} {self.profile[mode]} cpu: {status.cpu_temp}º water: {status.aio.water_temp}º')
+            self.journal(f'Mode: {self.mode} -> {mode} {self.profile[mode]} cpu: {status.cpu_temp}º max: {max_cpu_temp}º')
             self.mode = mode
             self.set_mode(mode)
 
     def mode_from_cpu_temp(self, temp: float):
         mode = len(self.profile) - 1
         for m, c in enumerate(self.profile):
-            # wait for a 8º reduction to avoid switching modes too often
-            if (temp < c[0] and temp > c[0] - 8) and m == self.mode:
-                mode = m
-                break
             if temp < c[0]:
                 break
             mode = m
@@ -229,7 +175,7 @@ class Aio:
         self.set_mode(3)
 
     def journal(self, msg):
-        print(f'CROM Aio - {msg}')
+        print(f'CROM Aio  - {msg}')
 
 class Case:
 
@@ -239,12 +185,12 @@ class Case:
         # water     cpu     rear    top     RGB
         # tempº     duty%   duty%   duty%   theme
         (0,         0,      0,      0,      "frost"),
-        (26,        30,     30,     30,     "cool"),
-        (27,        40,     40,     40,     "tepid"),
-        (28,        65,     60,     60,     "warm"),
-        (29,        70,     65,     65,     "toasty"),
-        (30,        92,     85,     85,     "burning"),
-        (31,        100,    100,    100,    "fusion")
+        (27,        30,     30,     30,     "cool"),
+        (28,        40,     40,     40,     "tepid"),
+        (29,        65,     60,     60,     "warm"),
+        (30,        75,     70,     70,     "toasty"),
+        (31,        92,     85,     85,     "burning"),
+        (32,        100,    100,    100,    "fusion")
     ]
 
     def __init__(self, case):
@@ -260,20 +206,22 @@ class Case:
             CoolerStatus(fan_value(3, "duty"), fan_value(3, "speed"))
         )
 
-    def adjust(self, status: CromStatus):
+    def tick(self, status: CromStatus):
+        open(f'{RUN_DIR}/case-monitor', "w").write(
+            str(f'{status.case.cpu_fan.duty} {status.case.rear_fan.duty} {status.case.top_fan.duty}\n'))
         mode = self.mode_from_water_temp(status.aio.water_temp)
         if mode != self.mode:
             self.journal(f'Mode: {self.mode} -> {mode} {self.profile[mode]} cpu: {status.cpu_temp}º water: {status.aio.water_temp}º')
             self.mode = mode
             self.set_mode(mode)
-            return mode
+            return self.profile[mode][4]
         return None
 
     def mode_from_water_temp(self, temp: float):
         mode = len(self.profile) - 1
         for m, c in enumerate(self.profile):
-            # wait for a 0.4º reduction to avoid switching modes too often
-            if (temp < c[0] and temp > c[0] - 0.4) and m == self.mode:
+            # wait for a 0.5º reduction to avoid switching modes too often
+            if (temp < c[0] and temp > c[0] - 0.5) and m == self.mode:
                 mode = m
                 break
             if temp < c[0]:
@@ -288,7 +236,7 @@ class Case:
         self.case.set_fixed_speed(FAN_TOP, top)
 
     def set_safe_mode(self):
-        self.set_mode(3)
+        self.set_mode(4)
 
     def journal(self, msg):
         print(f'CROM Case - {msg}')
@@ -302,16 +250,18 @@ class Rgb:
         self.aio = aio
         self.case = case
 
-    def set_mode(self, mode: int):
+    def set_theme(self, theme: Optional[str]):
+        if theme is None:
+            return
         if self.first_run:
             self.first_run = False
-            self.set_theme("init")
+            self._set_theme("init")
             time.sleep(1)
-            self.set_mode(mode)
+            self._set_theme(theme)
         else:
-            self.set_theme(PROFILE[mode][5])
+            self._set_theme(theme)
 
-    def set_theme(self, theme: str):
+    def _set_theme(self, theme: str):
         if self.off and theme != "error":
             self.ring("off", None)
             self.logo("fixed", "100060")
@@ -367,9 +317,9 @@ class Gpu:
     profile = [
         # tempº     fan%
         [0,         0],
-        [55,        37],
+        [56,        37],
         [65,        60],
-        [75,        100]
+        [74,        100]
     ]
     mode = -1
     last_set = time.time()
@@ -380,7 +330,7 @@ class Gpu:
         self.write_manual_pwm()
         self.write_manual_power_profile()
 
-    def adjust(self, temp: int):
+    def tick(self, temp: int):
         mode = self.mode_from_temp(temp)
         if mode != self.mode:
             self.journal(f'Mode: {self.mode} -> {mode} fan: {self.profile[mode][1]}% temp: {temp}º')
@@ -417,7 +367,7 @@ class Gpu:
             self.journal(e)
 
     def mode_from_temp(self, temp: int):
-        mode = len(PROFILE) - 1
+        mode = len(self.profile) - 1
         for m, c in enumerate(self.profile):
             # wait for a 8º reduction to avoid switching modes too often
             if (temp < c[0] and temp > c[0] - 8) and m == self.mode:
@@ -436,4 +386,4 @@ class Gpu:
             return 99 # assume the worst
 
     def journal(self, msg):
-        print(f'CROM GPU    - {msg}')
+        print(f'CROM GPU  - {msg}')
