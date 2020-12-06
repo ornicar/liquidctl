@@ -89,7 +89,14 @@ class Server:
 
             self.aio.tick(status)
 
-            self.rgb.set_theme(self.case.tick(status))
+            new_rgb_theme = self.case.tick(status)
+
+            if self.rgb.read_off() != self.rgb.off:
+                self.journal("Toggle RGB")
+                self.rgb.off = not self.rgb.off
+                new_rgb_theme = self.case.rgb_theme()
+
+            self.rgb.set_theme(new_rgb_theme)
 
             time.sleep(1)
 
@@ -99,12 +106,6 @@ class Server:
         except Exception as e:
             self.journal(e)
             return 99 # assume the worst
-
-    def read_rgb_off(self):
-        try:
-            return open(f'{RUN_DIR}/rgb-off').read().startswith("1")
-        except:
-            return False
 
     def exit_gracefully(self, signum, frame):
         self.journal("Stop")
@@ -181,16 +182,17 @@ class Case:
 
     mode = -1
 
+    base = 21
     profile = [
         # water     cpu     rear    top     RGB
         # tempº     duty%   duty%   duty%   theme
         (0,         0,      0,      0,      "frost"),
-        (27,        30,     30,     30,     "cool"),
-        (28,        40,     40,     40,     "tepid"),
-        (29,        65,     60,     60,     "warm"),
-        (30,        75,     70,     70,     "toasty"),
-        (31,        92,     85,     85,     "burning"),
-        (32,        100,    100,    100,    "fusion")
+        (base + 6,  30,     30,     30,     "cool"),
+        (base + 7,  40,     40,     40,     "tepid"),
+        (base + 8,  65,     60,     60,     "warm"),
+        (base + 9,  75,     70,     70,     "toasty"),
+        (base + 10, 92,     85,     85,     "burning"),
+        (base + 11, 100,    100,    100,    "fusion")
     ]
 
     def __init__(self, case):
@@ -214,7 +216,7 @@ class Case:
             self.journal(f'Mode: {self.mode} -> {mode} {self.profile[mode]} cpu: {status.cpu_temp}º water: {status.aio.water_temp}º')
             self.mode = mode
             self.set_mode(mode)
-            return self.profile[mode][4]
+            return self.rgb_theme()
         return None
 
     def mode_from_water_temp(self, temp: float):
@@ -237,6 +239,9 @@ class Case:
 
     def set_safe_mode(self):
         self.set_mode(4)
+
+    def rgb_theme(self):
+        return self.profile[self.mode][4]
 
     def journal(self, msg):
         print(f'CROM Case - {msg}')
@@ -311,6 +316,12 @@ class Rgb:
     def color_map(self, colors: str):
         from liquidctl.util import color_from_str
         return map(color_from_str, colors.split(' ') if colors else [])
+
+    def read_off(self):
+        try:
+            return open(f'{RUN_DIR}/rgb-off').read().startswith("1")
+        except:
+            return False
 
 # https://dri.freedesktop.org/docs/drm/gpu/amdgpu.html
 class Gpu:
