@@ -12,7 +12,7 @@ import os
 import sys
 
 from liquidctl.driver.base import BaseDriver, BaseBus, find_all_subclasses
-from liquidctl.util import check_unsafe
+from liquidctl.util import check_unsafe, LazyHexRepr
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -126,22 +126,56 @@ if sys.platform == 'linux':
                           register, value)
             return value
 
+        def read_word_data(self, address, register):
+            """Read a single 2-byte word from a given register."""
+            value = self._smbus.read_word_data(address, register)
+            _LOGGER.debug('read word data @ 0x%02x:0x%02x: 0x%04x', address,
+                          register, value)
+            return value
+
+        def read_block_data(self, address, register):
+            """Read a block of up to  32 bytes from a given register."""
+            data = self._smbus.read_block_data(address, register)
+            _LOGGER.debug('read block data @ 0x%02x:0x%02x: %r', address,
+                          register, LazyHexRepr(data))
+            return data
+
         def write_byte(self, address, value):
-            """Write a single byte from a device."""
+            """Write a single byte to a device."""
             _LOGGER.debug('writing byte @ 0x%02x: 0x%02x', address, value)
             return self._smbus.write_byte(address, value)
 
         def write_byte_data(self, address, register, value):
-            """Write a single byte from a designated register."""
+            """Write a single byte to a designated register."""
             _LOGGER.debug('writing byte data @ 0x%02x:0x%02x: 0x%02x', address,
                           register, value)
             return self._smbus.write_byte_data(address, register, value)
+
+        def write_word_data(self, address, register, value):
+            """Write a single 2-byte word to a designated register."""
+            _LOGGER.debug('writing word data @ 0x%02x:0x%02x: 0x%04x', address,
+                          register, value)
+            return self._smbus.write_word_data(address, register, value)
+
+        def write_block_data(self, address, register, data):
+            """Write a block of byte data to a given register."""
+            _LOGGER.debug('writing block data @ 0x%02x:0x%02x: %r', address,
+                          register, LazyHexRepr(data))
+            return self._smbus.write_block_data(address, register, data)
 
         def close(self):
             """Close the I²C connection."""
             if self._smbus:
                 self._smbus.close()
                 self._smbus = None
+
+        def load_spd_eeprom(self, spd_address):
+            spd_dev = f'{self._number}-{spd_address:04x}'
+            eeprom = self._i2c_dev.joinpath(spd_dev, 'eeprom')
+            try:
+                return eeprom.read_bytes()
+            except:
+                return None
 
         @property
         def name(self):
@@ -235,7 +269,7 @@ class SmbusDriver(BaseDriver):
         # specific and closer to the product the user purchased than the less
         # specific PCI vendor/device IDs.
 
-        assert vendor_id and product_id and address is not None
+        assert address is not None
 
         self._smbus = smbus
         self._description = description
@@ -268,12 +302,12 @@ class SmbusDriver(BaseDriver):
 
     @property
     def vendor_id(self):
-        """Numeric vendor identifier."""
+        """Numeric vendor identifier, or None if N/A."""
         return self._vendor_id
 
     @property
     def product_id(self):
-        """Numeric product identifier."""
+        """Numeric product identifier, or None if N/A."""
         return self._product_id
 
     @property
