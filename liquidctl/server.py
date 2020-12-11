@@ -29,11 +29,16 @@ from typing import List, Optional
 #
 # Disabling RGB is done by creating /run/crom/rgb-off.
 # echo 1 > /run/crom/rgb-off
+#
+# Changing turbo value is done by writing to /run/crom/turbo
 
 FAN_CPU = "fan1"
 FAN_REAR = "fan2"
 FAN_TOP = "fan3"
 RUN_DIR = "/run/crom"
+
+# quietest - 0 - 1 - 2 - 3 - 4 - coolest
+turbos = [0, 1, 2, 3, 4, 5]
 
 @dataclass
 class CoolerStatus:
@@ -180,23 +185,26 @@ class Aio:
 
 class Case:
 
+    turbo = -1
     mode = -1
 
-    base = 21
+    base = 20
     profile = [
         # water     cpu     rear    top     RGB
         # tempº     duty%   duty%   duty%   theme
         (0,         0,      0,      0,      "frost"),
-        (base + 6,  30,     30,     30,     "cool"),
-        (base + 7,  40,     40,     40,     "tepid"),
-        (base + 8,  65,     60,     60,     "warm"),
-        (base + 9,  75,     70,     70,     "toasty"),
-        (base + 10, 92,     85,     85,     "burning"),
-        (base + 11, 100,    100,    100,    "fusion")
+        (base + 8,  30,     30,     30,     "cool"),
+        (base + 9,  40,     40,     40,     "tepid"),
+        (base + 10, 55,     50,     50,     "warmish"),
+        (base + 11, 65,     60,     60,     "warm"),
+        (base + 12, 75,     70,     70,     "toasty"),
+        (base + 13, 92,     85,     85,     "burning"),
+        (base + 14, 100,    100,    100,    "fusion")
     ]
 
     def __init__(self, case):
         self.case = case
+        self.read_turbo()
 
     def status(self):
         cs = self.case.get_status()
@@ -209,11 +217,12 @@ class Case:
         )
 
     def tick(self, status: CromStatus):
+        self.read_turbo()
         open(f'{RUN_DIR}/case-monitor', "w").write(
-            str(f'{status.case.cpu_fan.duty} {status.case.rear_fan.duty} {status.case.top_fan.duty}\n'))
+            str(f'{status.case.cpu_fan.duty} {status.case.rear_fan.duty} {status.case.top_fan.duty} {self.turbo}\n'))
         mode = self.mode_from_water_temp(status.aio.water_temp)
         if mode != self.mode:
-            self.journal(f'Mode: {self.mode} -> {mode} {self.profile[mode]} cpu: {status.cpu_temp}º water: {status.aio.water_temp}º')
+            self.journal(f'Mode: {self.mode} -> {mode} {self.profile[mode]} cpu: {status.cpu_temp}º water: {status.aio.water_temp}º, turbo: {self.turbo}')
             self.mode = mode
             self.set_mode(mode)
             return self.rgb_theme()
@@ -221,6 +230,7 @@ class Case:
 
     def mode_from_water_temp(self, temp: float):
         mode = len(self.profile) - 1
+        temp = temp + self.turbo
         for m, c in enumerate(self.profile):
             # wait for a 0.5º reduction to avoid switching modes too often
             if (temp < c[0] and temp > c[0] - 0.5) and m == self.mode:
@@ -242,6 +252,13 @@ class Case:
 
     def rgb_theme(self):
         return self.profile[self.mode][4]
+
+    def read_turbo(self):
+        self.turbo = 1
+        try:
+            self.turbo = int(open(f'{RUN_DIR}/turbo').read())
+        except:
+            pass
 
     def journal(self, msg):
         print(f'CROM Case - {msg}')
@@ -279,7 +296,7 @@ class Rgb:
             self.ring("fading", "ffffff 444444")
             self.logo("fading", "111111 333333")
             self.strip("super-fixed", "0000ff 00ff00 ff0000 0000ff 00ff00 ff0000 0000ff 00ff00 ff0000 0000ff")
-        elif theme == "tepid":
+        elif theme == "tepid" or theme == "warmish":
             self.ring("fading", "440000 ff1100 ff0000")
             self.logo("fading", "660000 330000")
             self.strip("fading", "ffffff 0000ff 00ff00 ff0000", "slower")
