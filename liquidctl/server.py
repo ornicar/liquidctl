@@ -32,9 +32,9 @@ from typing import List, Optional
 #
 # Changing turbo value is done by writing to /run/crom/turbo
 
-FAN_CPU = "fan1"
-FAN_REAR = "fan2"
-FAN_TOP = "fan3"
+FAN_CPU1 = "fan1" # push/pull
+FAN_CPU2 = "fan2" # push
+FAN_CASE = "fan3"
 RUN_DIR = "/run/crom"
 
 # quietest - 0 - 1 - 2 - 3 - 4 - coolest
@@ -52,9 +52,9 @@ class AioStatus:
 
 @dataclass
 class CaseStatus:
-    cpu_fan: CoolerStatus
-    rear_fan: CoolerStatus
-    top_fan: CoolerStatus
+    cpu_fan1: CoolerStatus
+    cpu_fan2: CoolerStatus
+    case_fan: CoolerStatus
 
 @dataclass
 class CromStatus:
@@ -190,15 +190,15 @@ class Case:
 
     base = 20
     profile = [
-        # water     cpu     rear    top     RGB
+        # water     cpu1    cpu2    case    RGB
         # tempº     duty%   duty%   duty%   theme
-        (0,         0,      0,      0,      "frost"),
-        (base + 8,  30,     30,     30,     "cool"),
-        (base + 9,  40,     40,     40,     "tepid"),
-        (base + 10, 55,     50,     50,     "warmish"),
-        (base + 11, 65,     60,     60,     "warm"),
-        (base + 12, 75,     70,     70,     "toasty"),
-        (base + 13, 92,     85,     85,     "burning"),
+        (0,         20,     25,     20,     "frost"),
+        (base + 8,  30,     35,     30,     "cool"),
+        (base + 9,  40,     45,     40,     "tepid"),
+        (base + 10, 55,     55,     50,     "warmish"),
+        (base + 11, 65,     65,     60,     "warm"),
+        (base + 12, 75,     75,     70,     "toasty"),
+        (base + 13, 85,     85,     85,     "burning"),
         (base + 14, 100,    100,    100,    "fusion")
     ]
 
@@ -219,7 +219,7 @@ class Case:
     def tick(self, status: CromStatus):
         self.read_turbo()
         open(f'{RUN_DIR}/case-monitor', "w").write(
-            str(f'{status.case.cpu_fan.duty} {status.case.rear_fan.duty} {status.case.top_fan.duty} {self.turbo}\n'))
+            str(f'{status.case.cpu_fan1.duty} {status.case.cpu_fan2.duty} {status.case.case_fan.duty} {self.turbo}\n'))
         mode = self.mode_from_water_temp(status.aio.water_temp)
         if mode != self.mode:
             self.journal(f'Mode: {self.mode} -> {mode} {self.profile[mode]} cpu: {status.cpu_temp}º water: {status.aio.water_temp}º, turbo: {self.turbo}')
@@ -242,10 +242,10 @@ class Case:
         return mode
 
     def set_mode(self, mode: int):
-        _, cpu, rear, top, *_ = self.profile[mode]
-        self.case.set_fixed_speed(FAN_CPU, cpu)
-        self.case.set_fixed_speed(FAN_REAR, rear)
-        self.case.set_fixed_speed(FAN_TOP, top)
+        _, cpu1, cpu2, case, *_ = self.profile[mode]
+        self.case.set_fixed_speed(FAN_CPU1, cpu1)
+        self.case.set_fixed_speed(FAN_CPU2, cpu2)
+        self.case.set_fixed_speed(FAN_CASE, case)
 
     def set_safe_mode(self):
         self.set_mode(4)
@@ -344,15 +344,16 @@ class Rgb:
 class Gpu:
     profile = [
         # tempº     fan%
-        [0,         0],
-        [56,        37],
-        [65,        60],
+        [0,         37],
+        [58,        37],
+        [62,        46],
+        [66,        60],
         [74,        100]
     ]
     mode = -1
     last_set = time.time()
     sysfs_dir = '/sys/class/drm/card0/device'
-    hwmon_dir = f'{sysfs_dir}/hwmon/hwmon3'
+    hwmon_dir = f'{sysfs_dir}/hwmon/hwmon4'
 
     def __init__(self) -> None:
         self.write_manual_pwm()
@@ -397,8 +398,8 @@ class Gpu:
     def mode_from_temp(self, temp: int):
         mode = len(self.profile) - 1
         for m, c in enumerate(self.profile):
-            # wait for a 8º reduction to avoid switching modes too often
-            if (temp < c[0] and temp > c[0] - 8) and m == self.mode:
+            # wait for a 10º reduction to avoid switching modes too often
+            if (temp < c[0] and temp > c[0] - 10) and m == self.mode:
                 mode = m
                 break
             if temp < c[0]:
